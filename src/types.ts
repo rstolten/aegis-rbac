@@ -1,4 +1,4 @@
-import type { MongoAbility } from "@casl/ability";
+import type { AbilityTuple, MongoAbility } from "@casl/ability";
 
 /** A permission string in "resource:action" format, or "*" for full access */
 export type Permission = string;
@@ -7,6 +7,8 @@ export type Permission = string;
 export interface RoleConfig {
 	/** Permissions granted to this role in "resource:action" format */
 	permissions: Permission[];
+	/** Permissions explicitly denied, even if inherited or granted by wildcard */
+	deny?: Permission[];
 }
 
 /** Full RBAC configuration for a project */
@@ -16,6 +18,7 @@ export interface RBACConfig<TRole extends string = string> {
 	/**
 	 * Optional role hierarchy (highest to lowest).
 	 * Roles inherit all permissions from roles below them.
+	 * Must include all defined roles when provided.
 	 */
 	hierarchy?: TRole[];
 	/** Optional super admin role that bypasses all permission checks */
@@ -29,19 +32,34 @@ export interface ParsedPermission {
 }
 
 /** CASL ability type used throughout the package */
-export type AppAbility = MongoAbility<[string, string]>;
+export type AppAbility = MongoAbility<AbilityTuple>;
 
 /** Context passed to data scope resolvers */
-export interface ScopeContext {
+export interface ScopeContext<TRole extends string = string> {
 	userId: string;
-	tenantId: string;
-	role: string;
+	tenantId?: string;
+	role: TRole;
+	[key: string]: unknown;
 }
 
 /** A data scope resolver function */
-export type ScopeResolver<T = unknown> = (ctx: ScopeContext) => T | Promise<T>;
+export type ScopeResolver<TScope = unknown, TRole extends string = string> = (
+	ctx: ScopeContext<TRole>,
+) => TScope | Promise<TScope>;
 
 /** Data scope configuration mapping roles to their scope resolvers */
 export type DataScopeConfig<TRole extends string = string, TScope = unknown> = Partial<
-	Record<TRole, ScopeResolver<TScope>>
+	Record<TRole, ScopeResolver<TScope, TRole>>
 >;
+
+/** Options for resolveScope */
+export interface ResolveScopeOptions<TScope> {
+	/** Default scope when no resolver matches. If not provided and no resolver matches, resolveScope throws. */
+	defaultScope?: TScope;
+}
+
+/** Result from a framework-agnostic guard check */
+export interface GuardResult {
+	allowed: boolean;
+	ability: AppAbility;
+}

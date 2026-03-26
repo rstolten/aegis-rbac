@@ -74,6 +74,32 @@ describe("buildAbility", () => {
 	});
 });
 
+describe("buildAbility caching", () => {
+	test("returns same instance for same config+role", () => {
+		const a = buildAbility(config, "admin");
+		const b = buildAbility(config, "admin");
+		expect(a).toBe(b);
+	});
+
+	test("returns different instances for different roles", () => {
+		const admin = buildAbility(config, "admin");
+		const viewer = buildAbility(config, "analyst");
+		expect(admin).not.toBe(viewer);
+	});
+
+	test("caches independently per config", () => {
+		const config2 = defineRoles({
+			roles: {
+				admin: { permissions: ["workspace:read"] },
+				viewer: { permissions: ["brands:read"] },
+			},
+		});
+		const a = buildAbility(config, "admin");
+		const b = buildAbility(config2, "admin");
+		expect(a).not.toBe(b);
+	});
+});
+
 describe("can()", () => {
 	test("checks permission with resource:action format", () => {
 		expect(can(config, "admin", "members:invite")).toBe(true);
@@ -141,5 +167,70 @@ describe("config without superAdmin", () => {
 	test("owner only has defined permissions, not manage all", () => {
 		expect(can(noSuperConfig, "owner", "workspace:update")).toBe(true);
 		expect(can(noSuperConfig, "owner", "members:invite")).toBe(false);
+	});
+});
+
+describe("deny rules", () => {
+	const denyConfig = defineRoles({
+		roles: {
+			owner: { permissions: ["*"] },
+			admin: {
+				permissions: ["brands:*"],
+				deny: ["brands:delete"],
+			},
+			viewer: {
+				permissions: ["brands:read"],
+			},
+		},
+		hierarchy: ["owner", "admin", "viewer"],
+		superAdmin: "owner",
+	});
+
+	test("deny overrides a granted wildcard permission", () => {
+		expect(can(denyConfig, "admin", "brands:read")).toBe(true);
+		expect(can(denyConfig, "admin", "brands:write")).toBe(true);
+		expect(can(denyConfig, "admin", "brands:delete")).toBe(false);
+	});
+
+	test("deny does not propagate up hierarchy", () => {
+		// owner is superAdmin, should not be affected by admin's deny
+		expect(can(denyConfig, "owner", "brands:delete")).toBe(true);
+	});
+
+	test("superAdmin ignores deny rules", () => {
+		const ability = buildAbility(denyConfig, "owner");
+		expect(ability.can("delete", "brands")).toBe(true);
+		expect(ability.can("manage", "all")).toBe(true);
+	});
+
+	test("deny works with wildcard grant", () => {
+		const cfg = defineRoles({
+			roles: {
+				admin: { permissions: ["*"], deny: ["workspace:delete"] },
+			},
+		});
+		expect(can(cfg, "admin", "workspace:read")).toBe(true);
+		expect(can(cfg, "admin", "workspace:delete")).toBe(false);
+		expect(can(cfg, "admin", "brands:write")).toBe(true);
+	});
+
+	test("deny overrides inherited permission", () => {
+		const cfg = defineRoles({
+			roles: {
+				manager: {
+					permissions: ["campaigns:*"],
+					deny: ["brands:read"],
+				},
+				analyst: {
+					permissions: ["brands:read", "analytics:read"],
+				},
+			},
+			hierarchy: ["manager", "analyst"],
+		});
+		// manager inherits brands:read from analyst but denies it
+		expect(can(cfg, "manager", "brands:read")).toBe(false);
+		// manager still has campaigns and inherited analytics
+		expect(can(cfg, "manager", "campaigns:write")).toBe(true);
+		expect(can(cfg, "manager", "analytics:read")).toBe(true);
 	});
 });

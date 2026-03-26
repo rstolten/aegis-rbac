@@ -6,6 +6,8 @@ export { defineDataScope, resolveScope } from "./scope";
 export { buildAbility } from "./ability";
 export { can, authorize } from "./check";
 export { parsePermission } from "./permission";
+export { isRoleAtOrAbove } from "./hierarchy";
+export { createGuard } from "./guard";
 
 // Types
 export type {
@@ -17,4 +19,6 @@ export type {
 	ScopeContext,
 	ScopeResolver,
 	DataScopeConfig,
+	ResolveScopeOptions,
+	GuardResult,
 } from "./types";

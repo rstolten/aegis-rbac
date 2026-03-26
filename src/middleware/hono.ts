@@ -1,6 +1,5 @@
 import type { Context, Next } from "hono";
-import { buildAbility } from "../ability";
-import { parsePermission } from "../permission";
+import { createGuard } from "../guard";
 import type { RBACConfig } from "../types";
 
 /** Options for creating Hono RBAC middleware */
@@ -9,6 +8,10 @@ export interface HonoRBACOptions<TRole extends string = string> {
 	config: RBACConfig<TRole>;
 	/** Extract the user's role from the Hono context */
 	getRole: (c: Context) => TRole | undefined;
+	/** Custom handler for 401 Unauthorized. Defaults to JSON response. */
+	onUnauthorized?: (c: Context) => Response | Promise<Response>;
+	/** Custom handler for 403 Forbidden. Defaults to JSON response. */
+	onForbidden?: (c: Context) => Response | Promise<Response>;
 }
 
 /**
@@ -27,25 +30,30 @@ export interface HonoRBACOptions<TRole extends string = string> {
  */
 export function createRBACMiddleware<TRole extends string>(options: HonoRBACOptions<TRole>) {
 	const { config, getRole } = options;
+	const guard = createGuard(config);
+
+	const handleUnauthorized =
+		options.onUnauthorized ?? ((c: Context) => c.json({ data: null, error: "Unauthorized" }, 401));
+	const handleForbidden =
+		options.onForbidden ?? ((c: Context) => c.json({ data: null, error: "Forbidden" }, 403));
 
 	/**
-	 * Middleware that checks if the user has a specific permission.
+	 * Middleware that checks if the user has specific permissions.
 	 * Permission format: "resource:action" (e.g., "brands:write", "members:invite")
+	 * All permissions must pass (AND logic).
 	 */
 	function requirePermission(...permissions: string[]) {
 		return async (c: Context, next: Next) => {
 			const role = getRole(c);
 			if (!role) {
-				return c.json({ data: null, error: "Unauthorized" }, 401);
+				return handleUnauthorized(c);
 			}
 
-			const ability = buildAbility(config, role);
+			const { allowed, ability } = guard.checkPermission(role, ...permissions);
+			c.set("ability", ability);
 
-			for (const permission of permissions) {
-				const { action, subject } = parsePermission(permission);
-				if (!ability.can(action, subject)) {
-					return c.json({ data: null, error: "Forbidden" }, 403);
-				}
+			if (!allowed) {
+				return handleForbidden(c);
 			}
 
 			await next();
@@ -54,28 +62,24 @@ export function createRBACMiddleware<TRole extends string>(options: HonoRBACOpti
 
 	/**
 	 * Middleware that checks if the user has one of the specified roles.
+	 * Respects hierarchy — a higher role passes a check for a lower role.
 	 * Simpler than permission checking — use when you just need role gating.
 	 */
 	function requireRole(...allowedRoles: TRole[]) {
 		return async (c: Context, next: Next) => {
 			const role = getRole(c);
 			if (!role) {
-				return c.json({ data: null, error: "Unauthorized" }, 401);
+				return handleUnauthorized(c);
 			}
 
-			// Direct role match
-			if (allowedRoles.includes(role)) {
-				await next();
-				return;
+			const { allowed, ability } = guard.checkRole(role, ...allowedRoles);
+			c.set("ability", ability);
+
+			if (!allowed) {
+				return handleForbidden(c);
 			}
 
-			// Super admin bypass
-			if (config.superAdmin && role === config.superAdmin) {
-				await next();
-				return;
-			}
-
-			return c.json({ data: null, error: "Forbidden" }, 403);
+			await next();
 		};
 	}
 

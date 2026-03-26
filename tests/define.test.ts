@@ -89,10 +89,10 @@ describe("defineRoles validation", () => {
 	test("throws when hierarchy references unknown role", () => {
 		expect(() =>
 			defineRoles({
-				roles: { admin: { permissions: ["*"] } },
-				hierarchy: ["admin", "viewer"] as any,
+				roles: { admin: { permissions: ["*"] }, viewer: { permissions: ["workspace:read"] } },
+				hierarchy: ["admin", "viewer", "manager"] as any,
 			}),
-		).toThrow('unknown role "viewer"');
+		).toThrow('unknown role "manager"');
 	});
 
 	test("throws when superAdmin references unknown role", () => {
@@ -114,6 +114,64 @@ describe("defineRoles validation", () => {
 				},
 				hierarchy: ["owner", "admin", "viewer"],
 				superAdmin: "owner",
+			}),
+		).not.toThrow();
+	});
+});
+
+describe("hierarchy validation", () => {
+	test("throws when a defined role is missing from hierarchy", () => {
+		expect(() =>
+			defineRoles({
+				roles: {
+					admin: { permissions: ["*"] },
+					viewer: { permissions: ["workspace:read"] },
+					manager: { permissions: ["brands:read"] },
+				},
+				hierarchy: ["admin", "viewer"],
+			} as any),
+		).toThrow('Role "manager" is defined in roles but missing from hierarchy');
+	});
+
+	test("throws on duplicate entries in hierarchy", () => {
+		expect(() =>
+			defineRoles({
+				roles: {
+					admin: { permissions: ["*"] },
+					viewer: { permissions: ["workspace:read"] },
+				},
+				hierarchy: ["admin", "viewer", "admin"] as any,
+			}),
+		).toThrow('Duplicate role "admin" in hierarchy');
+	});
+
+	test("accepts hierarchy that covers all defined roles", () => {
+		expect(() =>
+			defineRoles({
+				roles: {
+					owner: { permissions: ["*"] },
+					admin: { permissions: ["workspace:update"] },
+					viewer: { permissions: ["workspace:read"] },
+				},
+				hierarchy: ["owner", "admin", "viewer"],
+			}),
+		).not.toThrow();
+	});
+});
+
+describe("deny rules validation", () => {
+	test("validates deny permissions format", () => {
+		expect(() =>
+			defineRoles({
+				roles: { admin: { permissions: ["*"], deny: [":broken"] } },
+			}),
+		).toThrow('Invalid deny permission ":broken"');
+	});
+
+	test("accepts valid deny permissions", () => {
+		expect(() =>
+			defineRoles({
+				roles: { admin: { permissions: ["*"], deny: ["brands:delete", "workspace:destroy"] } },
 			}),
 		).not.toThrow();
 	});

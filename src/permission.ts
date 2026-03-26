@@ -1,8 +1,10 @@
 import type { ParsedPermission } from "./types";
+import { isValidPermission } from "./validate";
 
 /**
  * Parse a permission string into action + subject.
  * Maps to CASL conventions: "*" → manage all, "resource:*" → manage resource.
+ * Throws on malformed input.
  *
  * @example
  * ```ts
@@ -13,6 +15,12 @@ import type { ParsedPermission } from "./types";
  * ```
  */
 export function parsePermission(permission: string): ParsedPermission {
+	if (!isValidPermission(permission)) {
+		throw new Error(
+			`Invalid permission "${permission}". Use "resource:action", "resource:*", or "*"`,
+		);
+	}
+
 	if (permission === "*") {
 		return { action: "manage", subject: "all" };
 	}

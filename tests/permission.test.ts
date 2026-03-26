@@ -29,3 +29,33 @@ describe("parsePermission", () => {
 		});
 	});
 });
+
+describe("parsePermission runtime validation", () => {
+	test("throws on empty string", () => {
+		expect(() => parsePermission("")).toThrow('Invalid permission ""');
+	});
+
+	test("throws on colon only", () => {
+		expect(() => parsePermission(":")).toThrow('Invalid permission ":"');
+	});
+
+	test("throws on leading colon", () => {
+		expect(() => parsePermission(":read")).toThrow('Invalid permission ":read"');
+	});
+
+	test("throws on trailing colon", () => {
+		expect(() => parsePermission("brands:")).toThrow('Invalid permission "brands:"');
+	});
+
+	test("throws on multiple colons", () => {
+		expect(() => parsePermission("a:b:c")).toThrow('Invalid permission "a:b:c"');
+	});
+
+	test("throws on wildcard subject *:read", () => {
+		expect(() => parsePermission("*:read")).toThrow('Invalid permission "*:read"');
+	});
+
+	test("throws on wildcard subject *:*", () => {
+		expect(() => parsePermission("*:*")).toThrow('Invalid permission "*:*"');
+	});
+});

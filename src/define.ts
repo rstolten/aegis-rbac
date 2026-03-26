@@ -1,21 +1,5 @@
 import type { RBACConfig, RoleConfig } from "./types";
-
-/**
- * Validate a permission string format.
- * Valid: "*", "resource", "resource:action", "resource:*"
- * Invalid: "", ":", ":read", "brands:", "a:b:c", "*:read", "*:*"
- */
-function isValidPermission(permission: string): boolean {
-	if (permission === "*") return true;
-	if (permission.length === 0) return false;
-	if (permission.startsWith(":") || permission.endsWith(":")) return false;
-	const parts = permission.split(":");
-	if (parts.length > 2) return false;
-	if (!parts.every((p) => p.length > 0)) return false;
-	// Subject (resource) cannot be "*" — use standalone "*" for global wildcard
-	if (parts[0] === "*") return false;
-	return true;
-}
+import { isValidPermission } from "./validate";
 
 /**
  * Recursively freeze an object and all nested objects/arrays.
@@ -57,7 +41,7 @@ export function defineRoles<TRole extends string>(
 		throw new Error("RBAC config must define at least one role");
 	}
 
-	// Validate permissions format
+	// Validate permissions format (both allow and deny)
 	for (const role of roleNames) {
 		const roleConfig = config.roles[role];
 		for (const permission of roleConfig.permissions) {
@@ -67,13 +51,41 @@ export function defineRoles<TRole extends string>(
 				);
 			}
 		}
+		if (roleConfig.deny) {
+			for (const permission of roleConfig.deny) {
+				if (!isValidPermission(permission)) {
+					throw new Error(
+						`Invalid deny permission "${permission}" in role "${role}". Use "resource:action", "resource:*", or "*"`,
+					);
+				}
+			}
+		}
 	}
 
-	// Validate hierarchy references existing roles
+	// Validate hierarchy
 	if (config.hierarchy) {
+		// Check for duplicates
+		const seen = new Set<TRole>();
+		for (const role of config.hierarchy) {
+			if (seen.has(role)) {
+				throw new Error(`Duplicate role "${role}" in hierarchy`);
+			}
+			seen.add(role);
+		}
+
+		// Check hierarchy references existing roles
 		for (const role of config.hierarchy) {
 			if (!config.roles[role]) {
 				throw new Error(`Hierarchy references unknown role "${role}"`);
+			}
+		}
+
+		// Check all defined roles are in hierarchy
+		for (const role of roleNames) {
+			if (!config.hierarchy.includes(role)) {
+				throw new Error(
+					`Role "${role}" is defined in roles but missing from hierarchy. All roles must be included when hierarchy is provided`,
+				);
 			}
 		}
 	}

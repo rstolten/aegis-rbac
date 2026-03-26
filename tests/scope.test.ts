@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { defineDataScope, resolveScope } from "../src/scope";
 
 type Scope =
-	| { type: "admin"; tenantId: string }
+	| { type: "admin"; tenantId: string | undefined }
 	| { type: "teacher"; classIds: string[] }
 	| { type: "parent"; childIds: string[] };
 
@@ -52,12 +52,34 @@ describe("resolveScope", () => {
 		expect(scope).toEqual({ type: "parent", childIds: ["child-of-parent-1"] });
 	});
 
-	test("returns undefined for unknown role", async () => {
+	test("throws when no resolver exists for role", async () => {
+		expect(
+			resolveScope(scopes, {
+				userId: "user-1",
+				tenantId: "school-1",
+				role: "unknown" as any,
+			}),
+		).rejects.toThrow('No scope resolver for role "unknown"');
+	});
+
+	test("returns defaultScope when no resolver exists", async () => {
+		const scope = await resolveScope(
+			scopes,
+			{
+				userId: "user-1",
+				tenantId: "school-1",
+				role: "unknown" as any,
+			},
+			{ defaultScope: null as any },
+		);
+		expect(scope).toBeNull();
+	});
+
+	test("works without tenantId", async () => {
 		const scope = await resolveScope(scopes, {
 			userId: "user-1",
-			tenantId: "school-1",
-			role: "unknown" as any,
+			role: "admin",
 		});
-		expect(scope).toBeUndefined();
+		expect(scope).toEqual({ type: "admin", tenantId: undefined });
 	});
 });
