@@ -1,0 +1,145 @@
+import { describe, expect, test } from "bun:test";
+import { buildAbility } from "../src/ability";
+import { authorize, can } from "../src/check";
+import { defineRoles } from "../src/define";
+
+const config = defineRoles({
+	roles: {
+		owner: { permissions: ["*"] },
+		admin: {
+			permissions: ["workspace:update", "members:invite", "members:remove", "brands:*"],
+		},
+		manager: {
+			permissions: ["brands:read", "brands:write", "campaigns:*"],
+		},
+		analyst: {
+			permissions: ["brands:read", "analytics:read"],
+		},
+	},
+	hierarchy: ["owner", "admin", "manager", "analyst"],
+	superAdmin: "owner",
+});
+
+describe("buildAbility", () => {
+	test("super admin can do everything", () => {
+		const ability = buildAbility(config, "owner");
+		expect(ability.can("manage", "all")).toBe(true);
+		expect(ability.can("delete", "workspace")).toBe(true);
+		expect(ability.can("read", "anything")).toBe(true);
+	});
+
+	test("admin has own permissions", () => {
+		const ability = buildAbility(config, "admin");
+		expect(ability.can("update", "workspace")).toBe(true);
+		expect(ability.can("invite", "members")).toBe(true);
+		expect(ability.can("manage", "brands")).toBe(true);
+	});
+
+	test("admin inherits from manager and analyst via hierarchy", () => {
+		const ability = buildAbility(config, "admin");
+		expect(ability.can("read", "analytics")).toBe(true);
+		expect(ability.can("manage", "campaigns")).toBe(true);
+	});
+
+	test("manager has own permissions", () => {
+		const ability = buildAbility(config, "manager");
+		expect(ability.can("read", "brands")).toBe(true);
+		expect(ability.can("write", "brands")).toBe(true);
+		expect(ability.can("manage", "campaigns")).toBe(true);
+	});
+
+	test("manager inherits from analyst", () => {
+		const ability = buildAbility(config, "manager");
+		expect(ability.can("read", "analytics")).toBe(true);
+	});
+
+	test("manager cannot access admin-only permissions", () => {
+		const ability = buildAbility(config, "manager");
+		expect(ability.can("update", "workspace")).toBe(false);
+		expect(ability.can("invite", "members")).toBe(false);
+	});
+
+	test("analyst has only read access", () => {
+		const ability = buildAbility(config, "analyst");
+		expect(ability.can("read", "brands")).toBe(true);
+		expect(ability.can("read", "analytics")).toBe(true);
+		expect(ability.can("write", "brands")).toBe(false);
+		expect(ability.can("manage", "campaigns")).toBe(false);
+	});
+
+	test("unknown role gets empty permissions", () => {
+		const ability = buildAbility(config, "nonexistent" as any);
+		expect(ability.can("read", "brands")).toBe(false);
+		expect(ability.can("manage", "all")).toBe(false);
+	});
+});
+
+describe("can()", () => {
+	test("checks permission with resource:action format", () => {
+		expect(can(config, "admin", "members:invite")).toBe(true);
+		expect(can(config, "analyst", "members:invite")).toBe(false);
+	});
+
+	test("checks wildcard permissions", () => {
+		expect(can(config, "owner", "*")).toBe(true);
+		expect(can(config, "admin", "brands:*")).toBe(true);
+		expect(can(config, "analyst", "brands:*")).toBe(false);
+	});
+
+	test("checks resource-only permission", () => {
+		expect(can(config, "admin", "brands")).toBe(true);
+		expect(can(config, "analyst", "campaigns")).toBe(false);
+	});
+});
+
+describe("authorize()", () => {
+	test("does not throw for allowed permission", () => {
+		expect(() => authorize(config, "admin", "members:invite")).not.toThrow();
+	});
+
+	test("throws for denied permission", () => {
+		expect(() => authorize(config, "analyst", "members:invite")).toThrow(
+			'Forbidden: role "analyst" cannot "invite" on "members"',
+		);
+	});
+
+	test("throws with correct message for wildcard denial", () => {
+		expect(() => authorize(config, "analyst", "*")).toThrow(
+			'Forbidden: role "analyst" cannot "manage" on "all"',
+		);
+	});
+
+	test("throws with correct message for resource-only denial", () => {
+		expect(() => authorize(config, "analyst", "campaigns")).toThrow(
+			'Forbidden: role "analyst" cannot "manage" on "campaigns"',
+		);
+	});
+});
+
+describe("config without hierarchy", () => {
+	const flatConfig = defineRoles({
+		roles: {
+			admin: { permissions: ["workspace:update", "members:invite"] },
+			viewer: { permissions: ["workspace:read"] },
+		},
+	});
+
+	test("roles do not inherit without hierarchy", () => {
+		expect(can(flatConfig, "admin", "workspace:update")).toBe(true);
+		expect(can(flatConfig, "admin", "workspace:read")).toBe(false);
+	});
+});
+
+describe("config without superAdmin", () => {
+	const noSuperConfig = defineRoles({
+		roles: {
+			owner: { permissions: ["workspace:*"] },
+			viewer: { permissions: ["workspace:read"] },
+		},
+	});
+
+	test("owner only has defined permissions, not manage all", () => {
+		expect(can(noSuperConfig, "owner", "workspace:update")).toBe(true);
+		expect(can(noSuperConfig, "owner", "members:invite")).toBe(false);
+	});
+});

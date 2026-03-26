@@ -1,0 +1,42 @@
+{
+	"name": "rbac",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		},
+		"./middleware/hono": {
+			"import": "./dist/middleware/hono.js",
+			"types": "./dist/middleware/hono.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "bun build ./src/index.ts ./src/middleware/hono.ts --outdir ./dist --target node --format esm && tsc --emitDeclarationOnly",
+		"prepare": "bun run build",
+		"test": "bun test",
+		"check": "biome check .",
+		"check:fix": "biome check --write ."
+	},
+	"peerDependencies": {
+		"hono": ">=4.0.0"
+	},
+	"peerDependenciesMeta": {
+		"hono": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"@types/bun": "^1.2.0",
+		"hono": "^4.0.0",
+		"typescript": "^5.7.0"
+	},
+	"dependencies": {
+		"@casl/ability": "^6.7.0"
+	}
+}
