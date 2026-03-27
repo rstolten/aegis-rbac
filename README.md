@@ -2,6 +2,31 @@
 
 Config-driven RBAC engine built on [CASL](https://casl.js.org/). Define roles and permissions once, use everywhere.
 
+## Why
+
+Every SaaS project needs authorization, and every team ends up building it differently — scattered `if (role === "admin")` checks, provider-specific RBAC tied to Clerk/WorkOS/Better Auth, or hand-rolled middleware that's hard to test.
+
+This package solves that by separating the **engine** (how permissions are checked) from the **config** (what roles and permissions exist). The engine is shared across all projects. Each project only provides a config file defining its roles.
+
+**What it replaces:**
+- Per-project role-checking middleware
+- Auth-provider-specific RBAC (Clerk roles, WorkOS roles, etc.)
+- Ad-hoc permission logic scattered across route handlers
+
+**What it does not replace:**
+- Your auth provider (this is not authentication — it's authorization)
+- Your database (roles are stored in your DB, this package reads them)
+
+## How it works
+
+```
+Auth provider → "who is this user?" → userId
+Your DB       → "what role do they have?" → role
+This package  → "what can that role do?" → allowed/denied
+```
+
+The auth adapter tells you **who**. Your database tells you their **role**. This package decides **what they can do**.
+
 ## Install
 
 This is an internal package. Add it as a workspace dependency or link it directly:
