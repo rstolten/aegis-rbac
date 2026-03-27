@@ -3,7 +3,7 @@ import { createGuard } from "../guard";
 import type { AbilityContext, AppAbility, RBACConfig } from "../types";
 
 /** Hono env type that provides typed access to the ability on context */
-export interface AegisEnv extends Env {
+export interface RBACEnv extends Env {
 	Variables: {
 		ability: AppAbility;
 	};
@@ -35,7 +35,7 @@ export interface HonoRBACOptions<TRole extends string = string> {
  * });
  *
  * // Type-safe access to ability:
- * const app = new Hono<AegisEnv>();
+ * const app = new Hono<RBACEnv>();
  * app.get("/brands", requirePermission("brands:read"), (c) => {
  *   const ability = c.get("ability"); // typed as AppAbility
  * });

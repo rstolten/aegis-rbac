@@ -86,7 +86,7 @@ const summary = getPermissions(rbacConfig, "admin");
 ### 3. Hono middleware
 
 ```ts
-import { createRBACMiddleware, type AegisEnv } from "aegis/middleware/hono";
+import { createRBACMiddleware, type RBACEnv } from "aegis/middleware/hono";
 
 const { requirePermission, requireRole } = createRBACMiddleware({
   config: rbacConfig,
@@ -102,7 +102,7 @@ app.delete("/workspace", requireRole("owner"), handler);
 app.get("/reports", requirePermission("brands:read", "analytics:read"), handler);
 
 // Type-safe access to the CASL ability in downstream handlers
-const app = new Hono<AegisEnv>();
+const app = new Hono<RBACEnv>();
 app.get("/brands", requirePermission("brands:read"), (c) => {
   const ability = c.get("ability"); // typed as AppAbility
   const canEdit = ability.can("write", "brands");
