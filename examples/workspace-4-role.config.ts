@@ -3,7 +3,7 @@
  * Pattern: owner > admin > manager > analyst
  * Use case: SaaS platforms with tiered team access
  */
-import { defineRoles } from "rbac";
+import { defineRoles } from "aegis";
 
 export const rbacConfig = defineRoles({
 	roles: {

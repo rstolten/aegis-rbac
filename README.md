@@ -1,4 +1,4 @@
-# rbac
+# aegis
 
 Config-driven RBAC engine built on [CASL](https://casl.js.org/). Define roles and permissions once, use everywhere.
 
@@ -33,7 +33,7 @@ This is an internal package. Add it as a workspace dependency or link it directl
 
 ```bash
 # In your project's package.json, add:
-"rbac": "file:../rbac"
+"aegis": "file:../aegis"
 
 # Then install
 bun install
@@ -44,7 +44,7 @@ bun install
 ### 1. Define roles
 
 ```ts
-import { defineRoles } from "rbac";
+import { defineRoles } from "aegis";
 
 export const rbacConfig = defineRoles({
   roles: {
@@ -69,7 +69,7 @@ export const rbacConfig = defineRoles({
 ### 2. Check permissions
 
 ```ts
-import { can, authorize, getPermissions } from "rbac";
+import { can, authorize, getPermissions } from "aegis";
 
 can(rbacConfig, "admin", "members:invite"); // true
 can(rbacConfig, "viewer", "members:invite"); // false
@@ -86,7 +86,7 @@ getPermissions(rbacConfig, "admin");
 ### 3. Hono middleware
 
 ```ts
-import { createRBACMiddleware } from "rbac/middleware/hono";
+import { createRBACMiddleware } from "aegis/middleware/hono";
 
 const { requirePermission, requireRole } = createRBACMiddleware({
   config: rbacConfig,
@@ -113,7 +113,7 @@ app.get("/brands", requirePermission("brands:read"), (c) => {
 Use `createGuard` with Express, Fastify, Elysia, or any framework:
 
 ```ts
-import { createGuard } from "rbac";
+import { createGuard } from "aegis";
 
 const guard = createGuard(rbacConfig);
 
@@ -199,7 +199,7 @@ Check against a resource instance using CASL's `subject()`:
 
 ```ts
 import { subject } from "@casl/ability";
-import { buildAbility } from "rbac";
+import { buildAbility } from "aegis";
 
 const ability = buildAbility(config, "editor");
 ability.can("update", subject("posts", { authorId: currentUserId })); // true if match
@@ -246,7 +246,7 @@ createRBACMiddleware({
 For row-level filtering based on user relationships:
 
 ```ts
-import { defineDataScope, resolveScope } from "rbac";
+import { defineDataScope, resolveScope } from "aegis";
 
 const scopes = defineDataScope({
   platform_admin: () => ({ type: "platform_admin" }),
@@ -275,7 +275,7 @@ const scope = await resolveScope(scopes, {
 Understand why a permission check passed or failed:
 
 ```ts
-import { debugCan, debugRole } from "rbac";
+import { debugCan, debugRole } from "aegis";
 
 const result = debugCan(config, "viewer", "brands:write");
 // {

@@ -3,7 +3,7 @@
  * Pattern: owner > editor > viewer
  * Use case: Collaborative tools with read/write/admin tiers
  */
-import { defineRoles } from "rbac";
+import { defineRoles } from "aegis";
 
 export const rbacConfig = defineRoles({
 	roles: {
