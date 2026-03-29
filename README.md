@@ -83,6 +83,8 @@ const summary = getPermissions(rbacConfig, "admin");
 // { permissions: [...], conditionals: [...], fields: [...], denied: [...] }
 ```
 
+`can()` and `authorize()` are conservative string-based helpers: they only succeed for unconditional grants. Conditional or field-scoped access needs a concrete resource instance checked through `buildAbility()`.
+
 ### 3. Hono middleware
 
 ```ts
@@ -91,7 +93,7 @@ import { createRBACMiddleware, type RBACEnv } from "aegis/middleware/hono";
 const { requirePermission, requireRole } = createRBACMiddleware({
   config: rbacConfig,
   getRole: (c) => c.get("workspaceRole"),
-  getContext: (c) => ({ userId: c.get("userId") }), // optional — for conditional permissions
+  getContext: (c) => ({ userId: c.get("userId") }), // optional — for downstream ability checks
 });
 
 app.get("/brands", requirePermission("brands:read"), handler);
@@ -109,6 +111,8 @@ app.get("/brands", requirePermission("brands:read"), (c) => {
   // ...
 });
 ```
+
+`requirePermission()` is also conservative: it only admits unconditional permission strings. For conditional or field-scoped rules, load the resource in the handler and check `c.get("ability")` against the concrete subject instance.
 
 ### 4. Framework-agnostic guard
 
@@ -207,12 +211,9 @@ import { buildAbility, can } from "aegis";
 const ability = buildAbility(config, "editor", { userId: "user-123" });
 ability.can("update", subject("posts", { authorId: "user-123" })); // true
 ability.can("update", subject("posts", { authorId: "other-user" })); // false
-
-// Or use the simpler can() with context
-can(config, "editor", "posts:update", { userId: "user-123" });
 ```
 
-Context flows through all APIs: `can()`, `authorize()`, `createGuard()`, and Hono middleware (via `getContext`). Super admin bypasses conditions.
+`context` is used to build abilities for concrete subject checks. The string-based helpers (`can()`, `authorize()`, `checkPermission()`, `requirePermission()`) stay conservative and do not treat conditional rules as granted without a resource instance. Super admin still bypasses conditions.
 
 ## Field-level permissions
 
@@ -234,7 +235,7 @@ defineRoles({
 });
 ```
 
-Field restrictions are **optional** — if you don't define `fields`, the permission grants access to all fields. Use CASL's `permittedFieldsOf()` to retrieve allowed fields in your application layer.
+Field restrictions are **optional** — if you don't define `fields`, the permission grants access to all fields. Use CASL's `permittedFieldsOf()` to retrieve allowed fields in your application layer, and do not rely on string-only helpers to authorize field-scoped access.
 
 ## Custom error responses
 

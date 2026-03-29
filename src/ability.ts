@@ -4,7 +4,7 @@ import {
 	type RawRuleOf,
 	createMongoAbility,
 } from "@casl/ability";
-import { parsePermission } from "./permission";
+import { parsePermission, permissionMatches } from "./permission";
 import type { AbilityContext, ConditionalPermission, FieldPermission, RBACConfig } from "./types";
 
 /** Cache: WeakMap<config, Map<cacheKey, ability>> */
@@ -35,19 +35,20 @@ function resolvePlaceholder(value: unknown, context: AbilityContext): unknown {
 /**
  * Deep-resolve all {{placeholder}} values in a conditions object.
  */
-function resolveConditions(
-	conditions: Record<string, unknown>,
-	context: AbilityContext,
-): Record<string, unknown> {
-	const resolved: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(conditions)) {
-		if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-			resolved[key] = resolveConditions(value as Record<string, unknown>, context);
-		} else {
-			resolved[key] = resolvePlaceholder(value, context);
-		}
+function resolveConditions(value: unknown, context: AbilityContext): unknown {
+	if (Array.isArray(value)) {
+		return value.map((entry) => resolveConditions(entry, context));
 	}
-	return resolved;
+
+	if (value !== null && typeof value === "object") {
+		const resolved: Record<string, unknown> = {};
+		for (const [key, nestedValue] of Object.entries(value)) {
+			resolved[key] = resolveConditions(nestedValue, context);
+		}
+		return resolved;
+	}
+
+	return resolvePlaceholder(value, context);
 }
 
 /**
@@ -147,6 +148,75 @@ function collectDenyPermissions<TRole extends string>(
 	return [...roleConfig.deny];
 }
 
+export interface PermissionAnalysis {
+	allowed: boolean;
+	isSuperAdmin: boolean;
+	grantedBy?: string;
+	deniedBy?: string;
+	conditionalMatches: ConditionalPermission[];
+	fieldMatches: FieldPermission[];
+}
+
+/**
+ * Analyze a permission string without evaluating a concrete resource instance.
+ * Conditional and field-scoped rules are surfaced separately so callers can
+ * stay conservative at route/helper level.
+ */
+export function analyzePermission<TRole extends string>(
+	config: RBACConfig<TRole>,
+	role: TRole,
+	permission: string,
+): PermissionAnalysis {
+	if (config.superAdmin && role === config.superAdmin) {
+		return {
+			allowed: true,
+			isSuperAdmin: true,
+			grantedBy: "*",
+			conditionalMatches: [],
+			fieldMatches: [],
+		};
+	}
+
+	const denyPermissions = collectDenyPermissions(config, role);
+	const deniedBy = denyPermissions.find((denyPermission) =>
+		permissionMatches(denyPermission, permission),
+	);
+	if (deniedBy) {
+		return {
+			allowed: false,
+			isSuperAdmin: false,
+			deniedBy,
+			conditionalMatches: [],
+			fieldMatches: [],
+		};
+	}
+
+	const grantedPermissions = collectPermissions(config, role);
+	const grantedBy = grantedPermissions.find((grantedPermission) =>
+		permissionMatches(grantedPermission, permission),
+	);
+	if (grantedBy) {
+		return {
+			allowed: true,
+			isSuperAdmin: false,
+			grantedBy,
+			conditionalMatches: [],
+			fieldMatches: [],
+		};
+	}
+
+	return {
+		allowed: false,
+		isSuperAdmin: false,
+		conditionalMatches: collectConditionalPermissions(config, role).filter((conditional) =>
+			permissionMatches(conditional.permission, permission),
+		),
+		fieldMatches: collectFieldPermissions(config, role).filter((fieldPermission) =>
+			permissionMatches(fieldPermission.permission, permission),
+		),
+	};
+}
+
 /**
  * Build a CASL ability for a given role based on the RBAC config.
  * Results are cached per config+role+context — safe because configs are frozen.
@@ -199,7 +269,9 @@ export function buildAbility<TRole extends string>(
 		const conditionals = collectConditionalPermissions(config, role);
 		for (const cp of conditionals) {
 			const { action, subject } = parsePermission(cp.permission);
-			const conditions = context ? resolveConditions(cp.conditions, context) : cp.conditions;
+			const conditions = context
+				? (resolveConditions(cp.conditions, context) as Record<string, unknown>)
+				: cp.conditions;
 			rules.push({ action, subject, conditions });
 		}
 

@@ -1,6 +1,5 @@
-import { buildAbility } from "./ability";
+import { analyzePermission, buildAbility } from "./ability";
 import { isRoleAtOrAbove } from "./hierarchy";
-import { parsePermission } from "./permission";
 import type { AbilityContext, GuardResult, RBACConfig } from "./types";
 
 /**
@@ -22,12 +21,14 @@ import type { AbilityContext, GuardResult, RBACConfig } from "./types";
 export function createGuard<TRole extends string>(config: RBACConfig<TRole>) {
 	return {
 		/**
-		 * Check if a role has all specified permissions.
+		 * Check if a role has all specified unconditional permissions.
 		 * Throws if no permissions are provided.
+		 * Conditional and field-scoped rules still need the returned ability
+		 * to be checked against a concrete resource instance.
 		 *
 		 * Overloads:
 		 * - checkPermission(role, ...permissions) — no context
-		 * - checkPermission(role, context, ...permissions) — with context for conditional perms
+		 * - checkPermission(role, context, ...permissions) — ability context for downstream checks
 		 */
 		checkPermission(
 			role: TRole,
@@ -51,10 +52,9 @@ export function createGuard<TRole extends string>(config: RBACConfig<TRole>) {
 			}
 
 			const ability = buildAbility(config, role, context);
-			const allowed = permissions.every((p) => {
-				const { action, subject } = parsePermission(p);
-				return ability.can(action, subject);
-			});
+			const allowed = permissions.every(
+				(permission) => analyzePermission(config, role, permission).allowed,
+			);
 			return { allowed, ability };
 		},
 

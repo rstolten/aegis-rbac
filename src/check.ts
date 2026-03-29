@@ -1,5 +1,5 @@
 import {
-	buildAbility,
+	analyzePermission,
 	collectConditionalPermissions,
 	collectFieldPermissions,
 	collectPermissions,
@@ -8,38 +8,39 @@ import { parsePermission } from "./permission";
 import type { AbilityContext, RBACConfig } from "./types";
 
 /**
- * Check if a role has a specific permission.
+ * Check if a role has an unconditional permission.
+ * Conditional and field-scoped rules require a concrete resource instance
+ * and are therefore not treated as granted by this string-based helper.
  *
  * @example
  * ```ts
  * can(config, "admin", "members:invite"); // true
  * can(config, "viewer", "members:invite"); // false
  *
- * // With context for conditional permissions
- * can(config, "editor", "posts:update", { userId: "user-123" }); // checks with resolved conditions
+ * // Conditional permissions require buildAbility() + a concrete subject instance
+ * can(config, "editor", "posts:update", { userId: "user-123" }); // false
  * ```
  */
 export function can<TRole extends string>(
 	config: RBACConfig<TRole>,
 	role: TRole,
 	permission: string,
-	context?: AbilityContext,
+	_context?: AbilityContext,
 ): boolean {
-	const ability = buildAbility(config, role, context);
-	const { action, subject } = parsePermission(permission);
-	return ability.can(action, subject);
+	return analyzePermission(config, role, permission).allowed;
 }
 
 /**
- * Assert that a role has a specific permission. Throws if unauthorized.
+ * Assert that a role has an unconditional permission. Throws if unauthorized.
+ * Conditional and field-scoped rules require a concrete resource instance.
  *
  * @example
  * ```ts
  * authorize(config, "viewer", "members:invite");
  * // throws: Forbidden: role "viewer" cannot "invite" on "members"
  *
- * // With context for conditional permissions
- * authorize(config, "editor", "posts:update", { userId: "user-123" });
+ * // Conditional permissions require buildAbility() + a concrete subject instance
+ * authorize(config, "editor", "posts:update", { userId: "user-123" }); // throws
  * ```
  */
 export function authorize<TRole extends string>(

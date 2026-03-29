@@ -68,8 +68,8 @@ describe("debugCan", () => {
 			},
 		});
 		const result = debugCan(condConfig, "editor", "posts:update");
-		expect(result.allowed).toBe(true);
-		expect(result.traces[0].reason).toContain("Conditionally granted");
+		expect(result.allowed).toBe(false);
+		expect(result.traces[0].reason).toContain("conditional rule");
 		expect(result.conditionalPermissions).toHaveLength(1);
 	});
 
@@ -83,9 +83,23 @@ describe("debugCan", () => {
 			},
 		});
 		const result = debugCan(fieldConfig, "analyst", "users:read");
-		expect(result.allowed).toBe(true);
-		expect(result.traces[0].reason).toContain("field-level");
+		expect(result.allowed).toBe(false);
+		expect(result.traces[0].reason).toContain("field-level rule");
 		expect(result.fieldPermissions).toHaveLength(1);
+	});
+
+	test("reports wildcard deny rules accurately", () => {
+		const denyAllConfig = defineRoles({
+			roles: {
+				user: {
+					permissions: ["*"],
+					deny: ["*"],
+				},
+			},
+		});
+		const result = debugCan(denyAllConfig, "user", "brands:read");
+		expect(result.allowed).toBe(false);
+		expect(result.traces[0].reason).toContain('deny rule "*"');
 	});
 
 	test("reports missing permission when only conditional exists for different action", () => {

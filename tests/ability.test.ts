@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { subject } from "@casl/ability";
 import { buildAbility } from "../src/ability";
 import { authorize, can, getPermissions } from "../src/check";
 import { defineRoles } from "../src/define";
@@ -139,6 +140,24 @@ describe("authorize()", () => {
 		expect(() => authorize(config, "analyst", "campaigns")).toThrow(
 			'Forbidden: role "analyst" cannot "manage" on "campaigns"',
 		);
+	});
+
+	test("throws for conditional-only permissions without a resource instance", () => {
+		const conditionalConfig = defineRoles({
+			roles: {
+				editor: {
+					permissions: ["posts:read"],
+					when: [{ permission: "posts:update", conditions: { authorId: "{{userId}}" } }],
+				},
+			},
+		});
+
+		expect(() =>
+			authorize(conditionalConfig, "editor", "posts:update", { userId: "user-1" }),
+		).toThrow('Forbidden: role "editor" cannot "update" on "posts"');
+
+		const ability = buildAbility(conditionalConfig, "editor", { userId: "user-1" });
+		expect(ability.can("update", subject("posts", { authorId: "user-1" }))).toBe(true);
 	});
 });
 

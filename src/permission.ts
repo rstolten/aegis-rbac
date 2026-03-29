@@ -39,3 +39,23 @@ export function parsePermission(permission: string): ParsedPermission {
 
 	return { action, subject };
 }
+
+/**
+ * Check whether a granted permission covers a required permission.
+ * Used by the string-based helpers which only reason about permission strings,
+ * not resource instances.
+ */
+export function permissionMatches(grantedPermission: string, requiredPermission: string): boolean {
+	const granted = parsePermission(grantedPermission);
+	const required = parsePermission(requiredPermission);
+
+	if (granted.subject === "all") {
+		return granted.action === "manage";
+	}
+
+	if (granted.subject !== required.subject) {
+		return false;
+	}
+
+	return granted.action === "manage" || granted.action === required.action;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildAbility } from "../src/ability";
+import { can } from "../src/check";
 import { defineRoles } from "../src/define";
 
 const config = defineRoles({
@@ -26,6 +27,10 @@ describe("field-level permissions", () => {
 	test("analyst can read users (field-restricted)", () => {
 		const ability = buildAbility(config, "analyst");
 		expect(ability.can("read", "users")).toBe(true);
+	});
+
+	test("string-based helpers stay conservative for field-restricted permissions", () => {
+		expect(can(config, "analyst", "users:read")).toBe(false);
 	});
 
 	test("analyst cannot update users", () => {
