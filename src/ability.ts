@@ -318,11 +318,20 @@ export function buildAbility<TRole extends string>(
 			rules.push({ action, subject, fields: fp.fields });
 		}
 
-		// Deny rules
+		// Deny rules (with action level expansion)
 		const denyPermissions = collectDenyPermissions(config, role);
 		for (const p of denyPermissions) {
 			const { action, subject } = parsePermission(p);
 			rules.push({ action, subject, inverted: true });
+			// Expand implied deny actions from actionLevels
+			if (config.actionLevels && action !== "manage") {
+				const levelIndex = config.actionLevels.indexOf(action);
+				if (levelIndex > 0) {
+					for (let i = 0; i < levelIndex; i++) {
+						rules.push({ action: config.actionLevels[i], subject, inverted: true });
+					}
+				}
+			}
 		}
 
 		ability = createMongoAbility(rules);

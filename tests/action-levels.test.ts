@@ -128,6 +128,23 @@ describe("action levels", () => {
 			expect(can(cfg, "editor", "posts:delete")).toBe(true);  // not denied (above write)
 		});
 
+		it("deny expansion is consistent between can() and buildAbility()", () => {
+			const cfg = defineRoles({
+				actionLevels: ["read", "write", "delete"],
+				roles: {
+					editor: {
+						permissions: ["posts:delete"],
+						deny: ["posts:write"],
+					},
+				},
+			});
+			const ability = buildAbility(cfg, "editor");
+			// buildAbility must match can() behavior
+			expect(ability.can("read", "posts")).toBe(false);   // matches can(cfg, "editor", "posts:read")
+			expect(ability.can("write", "posts")).toBe(false);  // matches can(cfg, "editor", "posts:write")
+			expect(ability.can("delete", "posts")).toBe(true);  // matches can(cfg, "editor", "posts:delete")
+		});
+
 		it("deny at a specific level does not deny higher levels", () => {
 			const cfg = defineRoles({
 				actionLevels: ["read", "write", "delete"],
