@@ -68,10 +68,8 @@ describe("buildAbility", () => {
 		expect(ability.can("manage", "campaigns")).toBe(false);
 	});
 
-	test("unknown role gets empty permissions", () => {
-		const ability = buildAbility(config, "nonexistent" as any);
-		expect(ability.can("read", "brands")).toBe(false);
-		expect(ability.can("manage", "all")).toBe(false);
+	test("unknown role throws", () => {
+		expect(() => buildAbility(config, "nonexistent" as any)).toThrow('Unknown role "nonexistent"');
 	});
 });
 
@@ -152,10 +150,12 @@ describe("authorize()", () => {
 			},
 		});
 
-		expect(() =>
-			authorize(conditionalConfig, "editor", "posts:update", { userId: "user-1" }),
-		).toThrow('Forbidden: role "editor" cannot "update" on "posts"');
+		// authorize() is conservative — conditional permissions are not treated as granted
+		expect(() => authorize(conditionalConfig, "editor", "posts:update")).toThrow(
+			'Forbidden: role "editor" cannot "update" on "posts"',
+		);
 
+		// Use buildAbility() + subject() for conditional checks
 		const ability = buildAbility(conditionalConfig, "editor", { userId: "user-1" });
 		expect(ability.can("update", subject("posts", { authorId: "user-1" }))).toBe(true);
 	});

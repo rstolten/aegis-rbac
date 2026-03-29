@@ -49,7 +49,6 @@ describe("conditional permissions with context", () => {
 
 	test("can() stays conservative for conditional permissions", () => {
 		expect(can(config, "editor", "posts:update")).toBe(false);
-		expect(can(config, "editor", "posts:update", { userId: "user-123" })).toBe(false);
 	});
 
 	test("viewer cannot update posts even with context", () => {
@@ -69,11 +68,11 @@ describe("conditional permissions with context", () => {
 		);
 	});
 
-	test("without context, placeholders remain literal", () => {
+	test("without context, conditional rules are skipped", () => {
 		const ability = buildAbility(config, "editor");
-		// Literal "{{userId}}" is the condition — only matches the literal string
-		expect(ability.can("update", subject("posts", { authorId: "{{userId}}" }))).toBe(true);
-		expect(ability.can("update", subject("posts", { authorId: "user-123" }))).toBe(false);
+		// Without context, conditional rules are not added — so editor can only read
+		expect(ability.can("read", "posts")).toBe(true);
+		expect(ability.can("update", subject("posts", { authorId: "anyone" }))).toBe(false);
 	});
 });
 

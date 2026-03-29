@@ -5,27 +5,24 @@ import {
 	collectPermissions,
 } from "./ability";
 import { parsePermission } from "./permission";
-import type { AbilityContext, RBACConfig } from "./types";
+import type { RBACConfig } from "./types";
 
 /**
  * Check if a role has an unconditional permission.
  * Conditional and field-scoped rules require a concrete resource instance
  * and are therefore not treated as granted by this string-based helper.
+ * Use buildAbility() for conditional/field-scoped checks.
  *
  * @example
  * ```ts
  * can(config, "admin", "members:invite"); // true
  * can(config, "viewer", "members:invite"); // false
- *
- * // Conditional permissions require buildAbility() + a concrete subject instance
- * can(config, "editor", "posts:update", { userId: "user-123" }); // false
  * ```
  */
 export function can<TRole extends string>(
 	config: RBACConfig<TRole>,
 	role: TRole,
 	permission: string,
-	_context?: AbilityContext,
 ): boolean {
 	return analyzePermission(config, role, permission).allowed;
 }
@@ -33,23 +30,20 @@ export function can<TRole extends string>(
 /**
  * Assert that a role has an unconditional permission. Throws if unauthorized.
  * Conditional and field-scoped rules require a concrete resource instance.
+ * Use buildAbility() for conditional/field-scoped checks.
  *
  * @example
  * ```ts
  * authorize(config, "viewer", "members:invite");
  * // throws: Forbidden: role "viewer" cannot "invite" on "members"
- *
- * // Conditional permissions require buildAbility() + a concrete subject instance
- * authorize(config, "editor", "posts:update", { userId: "user-123" }); // throws
  * ```
  */
 export function authorize<TRole extends string>(
 	config: RBACConfig<TRole>,
 	role: TRole,
 	permission: string,
-	context?: AbilityContext,
 ): void {
-	if (!can(config, role, permission, context)) {
+	if (!can(config, role, permission)) {
 		const { action, subject } = parsePermission(permission);
 		throw new Error(`Forbidden: role "${role}" cannot "${action}" on "${subject}"`);
 	}
@@ -86,6 +80,10 @@ export function getPermissions<TRole extends string>(
 	config: RBACConfig<TRole>,
 	role: TRole,
 ): PermissionsSummary {
+	if (!(role in config.roles)) {
+		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
+	}
+
 	if (config.superAdmin && role === config.superAdmin) {
 		return { permissions: ["*"], conditionals: [], fields: [], denied: [] };
 	}

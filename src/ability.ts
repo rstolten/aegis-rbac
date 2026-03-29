@@ -10,9 +10,23 @@ import type { AbilityContext, ConditionalPermission, FieldPermission, RBACConfig
 /** Cache: WeakMap<config, Map<cacheKey, ability>> */
 const abilityCache = new WeakMap<RBACConfig, Map<string, MongoAbility<AbilityTuple>>>();
 
+function stableStringify(obj: Record<string, unknown>): string {
+	const keys = Object.keys(obj).sort();
+	const parts: string[] = [];
+	for (const key of keys) {
+		const value = obj[key];
+		const serialized =
+			value !== null && typeof value === "object" && !Array.isArray(value)
+				? stableStringify(value as Record<string, unknown>)
+				: JSON.stringify(value);
+		parts.push(`${JSON.stringify(key)}:${serialized}`);
+	}
+	return `{${parts.join(",")}}`;
+}
+
 function makeCacheKey(role: string, context?: AbilityContext): string {
 	if (!context) return role;
-	return `${role}:${JSON.stringify(context)}`;
+	return `${role}:${stableStringify(context)}`;
 }
 
 /**
@@ -21,7 +35,7 @@ function makeCacheKey(role: string, context?: AbilityContext): string {
  */
 function resolvePlaceholder(value: unknown, context: AbilityContext): unknown {
 	if (typeof value !== "string") return value;
-	const match = value.match(/^\{\{(\w+)\}\}$/);
+	const match = value.match(/^\{\{([\w.:-]+)\}\}$/);
 	if (!match) return value;
 	const key = match[1];
 	if (!(key in context)) {
@@ -138,6 +152,10 @@ export function collectFieldPermissions<TRole extends string>(
 /**
  * Collect deny rules for a role. Deny rules are NOT inherited through hierarchy —
  * they only apply to the role that defines them.
+ *
+ * Rationale: if deny rules inherited downward, a higher role's deny would
+ * silently restrict lower roles that never intended to be denied. Each role
+ * should only deny permissions it explicitly declares.
  */
 function collectDenyPermissions<TRole extends string>(
 	config: RBACConfig<TRole>,
@@ -167,6 +185,10 @@ export function analyzePermission<TRole extends string>(
 	role: TRole,
 	permission: string,
 ): PermissionAnalysis {
+	if (!(role in config.roles)) {
+		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
+	}
+
 	if (config.superAdmin && role === config.superAdmin) {
 		return {
 			allowed: true,
@@ -250,6 +272,10 @@ export function buildAbility<TRole extends string>(
 		if (cached) return cached;
 	}
 
+	if (!(role in config.roles)) {
+		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
+	}
+
 	let ability: MongoAbility<AbilityTuple>;
 
 	// Super admin gets full access (deny rules do not apply)
@@ -265,14 +291,17 @@ export function buildAbility<TRole extends string>(
 			rules.push({ action, subject });
 		}
 
-		// Conditional permissions — resolve {{placeholders}} if context provided
+		// Conditional permissions — resolve {{placeholders}} against context.
+		// When context is omitted, conditional rules are silently skipped.
+		// This is intentional: callers like checkRole() need an ability for
+		// downstream use but don't have context yet.
 		const conditionals = collectConditionalPermissions(config, role);
-		for (const cp of conditionals) {
-			const { action, subject } = parsePermission(cp.permission);
-			const conditions = context
-				? (resolveConditions(cp.conditions, context) as Record<string, unknown>)
-				: cp.conditions;
-			rules.push({ action, subject, conditions });
+		if (context) {
+			for (const cp of conditionals) {
+				const { action, subject } = parsePermission(cp.permission);
+				const conditions = resolveConditions(cp.conditions, context) as Record<string, unknown>;
+				rules.push({ action, subject, conditions });
+			}
 		}
 
 		// Field-level permissions
