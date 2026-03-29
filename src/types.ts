@@ -26,7 +26,8 @@ export interface FieldPermission {
 export interface RoleConfig {
 	/** Permissions granted to this role in "resource:action" format */
 	permissions: Permission[];
-	/** Permissions explicitly denied, even if inherited or granted by wildcard */
+	/** Permissions explicitly denied, even if inherited or granted by wildcard.
+	 *  Deny rules do NOT inherit through hierarchy — they only apply to this role. */
 	deny?: Permission[];
 	/** Conditional permissions — access only when resource matches conditions */
 	when?: ConditionalPermission[];
