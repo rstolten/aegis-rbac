@@ -1,4 +1,5 @@
 import {
+	analyzePermission,
 	collectConditionalPermissions,
 	collectFieldPermissions,
 	collectPermissions,
@@ -78,7 +79,8 @@ export function debugCan<TRole extends string>(
 	};
 
 	// Super admin bypass
-	if (config.superAdmin && role === config.superAdmin) {
+	const analysis = analyzePermission(config, role, permission);
+	if (analysis.isSuperAdmin) {
 		traces.push({
 			permission,
 			allowed: true,
@@ -87,31 +89,21 @@ export function debugCan<TRole extends string>(
 		return { ...result, allowed: true, effectivePermissions: ["*"] };
 	}
 
-	const { action, subject } = parsePermission(permission);
-
-	// Check deny rules
 	const roleConfig = config.roles[role];
-	if (roleConfig?.deny) {
-		for (const deny of roleConfig.deny) {
-			const parsed = parsePermission(deny);
-			if (
-				(parsed.action === action && parsed.subject === subject) ||
-				(parsed.action === "manage" && parsed.subject === subject)
-			) {
-				traces.push({
-					permission,
-					allowed: false,
-					reason: `Denied by explicit deny rule "${deny}" on role "${role}"`,
-				});
-				return result;
-			}
-		}
+	const { subject } = parsePermission(permission);
+	if (analysis.deniedBy) {
+		traces.push({
+			permission,
+			allowed: false,
+			reason: `Denied by explicit deny rule "${analysis.deniedBy}" on role "${role}"`,
+		});
+		return result;
 	}
 
 	// Check direct permissions
-	for (const perm of effectivePermissions) {
-		const parsed = parsePermission(perm);
-		if (perm === "*") {
+	if (analysis.grantedBy) {
+		const parsed = parsePermission(analysis.grantedBy);
+		if (analysis.grantedBy === "*") {
 			traces.push({
 				permission,
 				allowed: true,
@@ -123,53 +115,37 @@ export function debugCan<TRole extends string>(
 			traces.push({
 				permission,
 				allowed: true,
-				reason: `Granted by resource wildcard "${perm}"`,
+				reason: `Granted by resource wildcard "${analysis.grantedBy}"`,
 			});
 			return { ...result, allowed: true };
 		}
-		if (parsed.action === action && parsed.subject === subject) {
-			const isOwn = roleConfig?.permissions.includes(perm);
-			traces.push({
-				permission,
-				allowed: true,
-				reason: isOwn
-					? `Granted by direct permission "${perm}" on role "${role}"`
-					: `Granted by inherited permission "${perm}"`,
-			});
-			return { ...result, allowed: true };
-		}
+		const isOwn = roleConfig?.permissions.includes(analysis.grantedBy);
+		traces.push({
+			permission,
+			allowed: true,
+			reason: isOwn
+				? `Granted by direct permission "${analysis.grantedBy}" on role "${role}"`
+				: `Granted by inherited permission "${analysis.grantedBy}"`,
+		});
+		return { ...result, allowed: true };
 	}
 
-	// Check conditional permissions
-	for (const cp of conditionalPermissions) {
-		const parsed = parsePermission(cp.permission);
-		if (
-			(parsed.action === action && parsed.subject === subject) ||
-			(parsed.action === "manage" && parsed.subject === subject)
-		) {
-			traces.push({
-				permission,
-				allowed: true,
-				reason: `Conditionally granted by "${cp.permission}" with conditions ${JSON.stringify(cp.conditions)}. Actual access depends on resource matching at runtime.`,
-			});
-			return { ...result, allowed: true };
-		}
+	if (analysis.conditionalMatches.length > 0) {
+		traces.push({
+			permission,
+			allowed: false,
+			reason: `Matched conditional rule "${analysis.conditionalMatches[0].permission}", but this API cannot authorize without a concrete resource instance.`,
+		});
+		return result;
 	}
 
-	// Check field-level permissions
-	for (const fp of fieldPermissions) {
-		const parsed = parsePermission(fp.permission);
-		if (
-			(parsed.action === action && parsed.subject === subject) ||
-			(parsed.action === "manage" && parsed.subject === subject)
-		) {
-			traces.push({
-				permission,
-				allowed: true,
-				reason: `Granted by field-level permission "${fp.permission}" (fields: ${fp.fields.join(", ")})`,
-			});
-			return { ...result, allowed: true };
-		}
+	if (analysis.fieldMatches.length > 0) {
+		traces.push({
+			permission,
+			allowed: false,
+			reason: `Matched field-level rule "${analysis.fieldMatches[0].permission}", but this API cannot authorize field-scoped access from a permission string alone.`,
+		});
+		return result;
 	}
 
 	// Not found

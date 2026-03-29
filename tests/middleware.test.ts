@@ -207,7 +207,7 @@ describe("empty requirePermission", () => {
 });
 
 describe("middleware with getContext", () => {
-	test("resolves conditional permissions via getContext", async () => {
+	test("does not treat conditional permissions as route-level grants", async () => {
 		const conditionalConfig = defineRoles({
 			roles: {
 				editor: {
@@ -229,7 +229,7 @@ describe("middleware with getContext", () => {
 		});
 		app.put("/posts", requirePermission("posts:update"), (c) => c.json({ ok: true }));
 		const res = await app.request("/posts", { method: "PUT" });
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(403);
 	});
 });
 

@@ -48,13 +48,13 @@ describe("createGuard", () => {
 	});
 
 	describe("checkPermission with context", () => {
-		test("resolves conditional permissions with context", () => {
+		test("returns the ability but does not treat conditional permissions as route-level grants", () => {
 			const { allowed, ability } = guard.checkPermission(
 				"editor",
 				{ userId: "user-123" },
 				"posts:update",
 			);
-			expect(allowed).toBe(true);
+			expect(allowed).toBe(false);
 			expect(ability.can("update", subject("posts", { authorId: "user-123" }))).toBe(true);
 			expect(ability.can("update", subject("posts", { authorId: "other" }))).toBe(false);
 		});

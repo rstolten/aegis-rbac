@@ -15,7 +15,7 @@ export interface HonoRBACOptions<TRole extends string = string> {
 	config: RBACConfig<TRole>;
 	/** Extract the user's role from the Hono context */
 	getRole: (c: Context) => TRole | undefined;
-	/** Extract the ability context for resolving {{placeholder}} conditions. Optional. */
+	/** Extract the ability context for downstream ability checks. Optional. */
 	getContext?: (c: Context) => AbilityContext | undefined;
 	/** Custom handler for 401 Unauthorized. Defaults to JSON response. */
 	onUnauthorized?: (c: Context) => Response | Promise<Response>;
@@ -51,9 +51,11 @@ export function createRBACMiddleware<TRole extends string>(options: HonoRBACOpti
 		options.onForbidden ?? ((c: Context) => c.json({ data: null, error: "Forbidden" }, 403));
 
 	/**
-	 * Middleware that checks if the user has specific permissions.
+	 * Middleware that checks if the user has specific unconditional permissions.
 	 * Permission format: "resource:action" (e.g., "brands:write", "members:invite")
 	 * All permissions must pass (AND logic).
+	 * Conditional and field-scoped rules still need `c.get("ability")`
+	 * to be checked against a concrete resource instance in the handler.
 	 * Throws at startup if called with no permissions.
 	 */
 	function requirePermission(...permissions: string[]) {
@@ -70,9 +72,10 @@ export function createRBACMiddleware<TRole extends string>(options: HonoRBACOpti
 			}
 
 			const context = getContext?.(c);
+			const [firstPermission, ...remainingPermissions] = permissions;
 			const { allowed, ability } = context
-				? guard.checkPermission(role, context, ...permissions)
-				: guard.checkPermission(role, ...permissions);
+				? guard.checkPermission(role, context, firstPermission, ...remainingPermissions)
+				: guard.checkPermission(role, firstPermission, ...remainingPermissions);
 			c.set("ability", ability);
 
 			if (!allowed) {

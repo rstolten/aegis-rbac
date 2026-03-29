@@ -47,11 +47,9 @@ describe("conditional permissions with context", () => {
 		expect(ability.can("delete", subject("posts", { authorId: "other" }))).toBe(false);
 	});
 
-	test("can() with context resolves conditional permissions", () => {
-		// can() without context — conditional perm exists but placeholder is literal
-		expect(can(config, "editor", "posts:update")).toBe(true);
-		// can() with context — same behavior, resolved
-		expect(can(config, "editor", "posts:update", { userId: "user-123" })).toBe(true);
+	test("can() stays conservative for conditional permissions", () => {
+		expect(can(config, "editor", "posts:update")).toBe(false);
+		expect(can(config, "editor", "posts:update", { userId: "user-123" })).toBe(false);
 	});
 
 	test("viewer cannot update posts even with context", () => {
@@ -121,6 +119,28 @@ describe("placeholder resolution", () => {
 		const ability = buildAbility(staticConfig, "editor", { userId: "user-1" });
 		expect(ability.can("update", subject("posts", { status: "draft" }))).toBe(true);
 		expect(ability.can("update", subject("posts", { status: "published" }))).toBe(false);
+	});
+
+	test("resolves placeholders nested inside array-valued operators", () => {
+		const nestedConfig = defineRoles({
+			roles: {
+				editor: {
+					permissions: [],
+					when: [
+						{
+							permission: "posts:read",
+							conditions: {
+								reviewerIds: { $in: ["{{userId}}"] },
+							},
+						},
+					],
+				},
+			},
+		});
+
+		const ability = buildAbility(nestedConfig, "editor", { userId: "user-1" });
+		expect(ability.can("read", subject("posts", { reviewerIds: ["user-1"] }))).toBe(true);
+		expect(ability.can("read", subject("posts", { reviewerIds: ["other-user"] }))).toBe(false);
 	});
 });
 
