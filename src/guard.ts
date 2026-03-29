@@ -1,4 +1,4 @@
-import { analyzePermission, buildAbility } from "./ability";
+import { analyzePermission, buildAbility, createEmptyAbility, isKnownRole } from "./ability";
 import { isRoleAtOrAbove } from "./hierarchy";
 import type { AbilityContext, GuardResult, RBACConfig } from "./types";
 
@@ -51,6 +51,10 @@ export function createGuard<TRole extends string>(config: RBACConfig<TRole>) {
 				);
 			}
 
+			if (!isKnownRole(config, role)) {
+				return { allowed: false, ability: createEmptyAbility() };
+			}
+
 			const ability = buildAbility(config, role, context);
 			const allowed = permissions.every(
 				(permission) => analyzePermission(config, role, permission).allowed,
@@ -62,8 +66,26 @@ export function createGuard<TRole extends string>(config: RBACConfig<TRole>) {
 		 * Check if a role matches any of the allowed roles (respects hierarchy and superAdmin).
 		 * Returns the result and the CASL ability for downstream use.
 		 */
-		checkRole(role: TRole, ...allowedRoles: TRole[]): GuardResult {
-			const ability = buildAbility(config, role);
+		checkRole(
+			role: TRole,
+			contextOrAllowedRole: AbilityContext | TRole,
+			...rest: TRole[]
+		): GuardResult {
+			let context: AbilityContext | undefined;
+			let allowedRoles: TRole[];
+
+			if (typeof contextOrAllowedRole === "string") {
+				allowedRoles = [contextOrAllowedRole, ...rest];
+			} else {
+				context = contextOrAllowedRole;
+				allowedRoles = rest;
+			}
+
+			if (!isKnownRole(config, role)) {
+				return { allowed: false, ability: createEmptyAbility() };
+			}
+
+			const ability = buildAbility(config, role, context);
 
 			// Direct role match
 			if (allowedRoles.includes(role)) {
