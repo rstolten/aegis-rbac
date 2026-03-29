@@ -10,23 +10,15 @@ import type { AbilityContext, ConditionalPermission, FieldPermission, RBACConfig
 /** Cache: WeakMap<config, Map<cacheKey, ability>> */
 const abilityCache = new WeakMap<RBACConfig, Map<string, MongoAbility<AbilityTuple>>>();
 
-function stableStringify(obj: Record<string, unknown>): string {
-	const keys = Object.keys(obj).sort();
-	const parts: string[] = [];
-	for (const key of keys) {
-		const value = obj[key];
-		const serialized =
-			value !== null && typeof value === "object" && !Array.isArray(value)
-				? stableStringify(value as Record<string, unknown>)
-				: JSON.stringify(value);
-		parts.push(`${JSON.stringify(key)}:${serialized}`);
-	}
-	return `{${parts.join(",")}}`;
+export function isKnownRole<TRole extends string>(
+	config: RBACConfig<TRole>,
+	role: string,
+): role is TRole {
+	return role in config.roles;
 }
 
-function makeCacheKey(role: string, context?: AbilityContext): string {
-	if (!context) return role;
-	return `${role}:${stableStringify(context)}`;
+export function createEmptyAbility(): MongoAbility<AbilityTuple> {
+	return createMongoAbility([]);
 }
 
 /**
@@ -185,8 +177,13 @@ export function analyzePermission<TRole extends string>(
 	role: TRole,
 	permission: string,
 ): PermissionAnalysis {
-	if (!(role in config.roles)) {
-		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
+	if (!isKnownRole(config, role)) {
+		return {
+			allowed: false,
+			isSuperAdmin: false,
+			conditionalMatches: [],
+			fieldMatches: [],
+		};
 	}
 
 	if (config.superAdmin && role === config.superAdmin) {
@@ -263,17 +260,18 @@ export function buildAbility<TRole extends string>(
 	role: TRole,
 	context?: AbilityContext,
 ): MongoAbility<AbilityTuple> {
-	const key = makeCacheKey(role, context);
+	if (!isKnownRole(config, role)) {
+		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
+	}
+
+	const shouldCache = context === undefined;
+	const key = role;
 
 	// Check cache
 	let roleCache = abilityCache.get(config);
-	if (roleCache) {
+	if (shouldCache && roleCache) {
 		const cached = roleCache.get(key);
 		if (cached) return cached;
-	}
-
-	if (!(role in config.roles)) {
-		throw new Error(`Unknown role "${role}". Valid roles: ${Object.keys(config.roles).join(", ")}`);
 	}
 
 	let ability: MongoAbility<AbilityTuple>;
@@ -322,11 +320,13 @@ export function buildAbility<TRole extends string>(
 	}
 
 	// Store in cache
-	if (!roleCache) {
-		roleCache = new Map();
-		abilityCache.set(config, roleCache);
+	if (shouldCache) {
+		if (!roleCache) {
+			roleCache = new Map();
+			abilityCache.set(config, roleCache);
+		}
+		roleCache.set(key, ability);
 	}
-	roleCache.set(key, ability);
 
 	return ability;
 }

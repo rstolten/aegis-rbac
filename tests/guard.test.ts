@@ -45,6 +45,12 @@ describe("createGuard", () => {
 		test("throws on empty permissions", () => {
 			expect(() => guard.checkPermission("admin")).toThrow("requires at least one permission");
 		});
+
+		test("fails closed for unknown roles", () => {
+			const result = guard.checkPermission("ghost" as any, "brands:read");
+			expect(result.allowed).toBe(false);
+			expect(result.ability.can("read", "brands")).toBe(false);
+		});
 	});
 
 	describe("checkPermission with context", () => {
@@ -94,6 +100,18 @@ describe("createGuard", () => {
 		test("returns ability for downstream use", () => {
 			const { ability } = guard.checkRole("admin", "admin");
 			expect(ability.can("invite", "members")).toBe(true);
+		});
+
+		test("accepts context for downstream ability checks", () => {
+			const { allowed, ability } = guard.checkRole("editor", { userId: "user-123" }, "editor");
+			expect(allowed).toBe(true);
+			expect(ability.can("update", subject("posts", { authorId: "user-123" }))).toBe(true);
+		});
+
+		test("fails closed for unknown roles", () => {
+			const result = guard.checkRole("ghost" as any, "admin");
+			expect(result.allowed).toBe(false);
+			expect(result.ability.can("manage", "all")).toBe(false);
 		});
 	});
 

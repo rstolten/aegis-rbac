@@ -80,6 +80,12 @@ describe("buildAbility caching", () => {
 		expect(a).toBe(b);
 	});
 
+	test("does not cache abilities when context is provided", () => {
+		const a = buildAbility(config, "admin", { userId: "user-1" });
+		const b = buildAbility(config, "admin", { userId: "user-1" });
+		expect(a).not.toBe(b);
+	});
+
 	test("returns different instances for different roles", () => {
 		const admin = buildAbility(config, "admin");
 		const viewer = buildAbility(config, "analyst");
@@ -103,6 +109,10 @@ describe("can()", () => {
 	test("checks permission with resource:action format", () => {
 		expect(can(config, "admin", "members:invite")).toBe(true);
 		expect(can(config, "analyst", "members:invite")).toBe(false);
+	});
+
+	test("fails closed for unknown roles", () => {
+		expect(can(config, "nonexistent" as any, "members:invite")).toBe(false);
 	});
 
 	test("checks wildcard permissions", () => {

@@ -1,4 +1,5 @@
 import type { Context, Env, Next } from "hono";
+import { createEmptyAbility } from "../ability";
 import { createGuard } from "../guard";
 import type { AbilityContext, AppAbility, RBACConfig } from "../types";
 
@@ -97,7 +98,14 @@ export function createRBACMiddleware<TRole extends string>(options: HonoRBACOpti
 				return handleUnauthorized(c);
 			}
 
-			const { allowed, ability } = guard.checkRole(role, ...allowedRoles);
+			const context = getContext?.(c);
+			const [firstRole, ...remainingRoles] = allowedRoles;
+			const { allowed, ability } =
+				context && firstRole
+					? guard.checkRole(role, context, firstRole, ...remainingRoles)
+					: firstRole
+						? guard.checkRole(role, firstRole, ...remainingRoles)
+						: { allowed: false, ability: createEmptyAbility() };
 			c.set("ability", ability);
 
 			if (!allowed) {

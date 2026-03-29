@@ -78,6 +78,11 @@ describe("requirePermission middleware", () => {
 		expect((await app.request("/brands")).status).toBe(401);
 	});
 
+	test("returns 403 for unknown roles instead of 500", async () => {
+		const app = createApp("ghost");
+		expect((await app.request("/brands")).status).toBe(403);
+	});
+
 	test("does not affect unprotected routes", async () => {
 		const app = createApp(undefined);
 		expect((await app.request("/public")).status).toBe(200);
@@ -230,6 +235,40 @@ describe("middleware with getContext", () => {
 		app.put("/posts", requirePermission("posts:update"), (c) => c.json({ ok: true }));
 		const res = await app.request("/posts", { method: "PUT" });
 		expect(res.status).toBe(403);
+	});
+
+	test("propagates getContext to the ability on requireRole routes", async () => {
+		const conditionalConfig = defineRoles({
+			roles: {
+				editor: {
+					permissions: ["posts:read"],
+					when: [{ permission: "posts:update", conditions: { authorId: "{{userId}}" } }],
+				},
+			},
+		});
+		const app = new Hono();
+		app.use("*", async (c, next) => {
+			c.set("workspaceRole", "editor");
+			c.set("userId", "user-123");
+			await next();
+		});
+		const { requireRole } = createRBACMiddleware({
+			config: conditionalConfig,
+			getRole: (c) => (c as any).get("workspaceRole"),
+			getContext: (c) => ({ userId: (c as any).get("userId") }),
+		});
+		app.get("/posts", requireRole("editor"), (c) => {
+			const ability = c.get("ability");
+			return c.json({
+				canUpdateOwn: ability.can("update", {
+					__caslSubjectType__: "posts",
+					authorId: "user-123",
+				}),
+			});
+		});
+		const res = await app.request("/posts");
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ canUpdateOwn: true });
 	});
 });
 
